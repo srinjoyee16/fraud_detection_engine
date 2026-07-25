@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proof-of-Claim App</title>
+<style>
+  :root { --blue:#2563eb; --ink:#111827; --muted:#6b7280; --line:#e5e7eb; --bg:#f3f4f6; --ok:#16a34a; --warn:#d97706; --bad:#dc2626; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--ink); }
+  header { max-width:980px; margin:0 auto; padding:20px 16px 4px; }
+  h1 { font-size:21px; margin:0 0 4px; }
+  header p { margin:0; color:var(--muted); font-size:13px; line-height:1.5; }
+  main { max-width:980px; margin:0 auto; padding:12px 16px 40px; display:grid; gap:16px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .card h2 { font-size:15px; margin:0 0 12px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:10px 14px; }
+  label { font-size:12px; color:var(--muted); display:block; }
+  input, select { width:100%; padding:8px; border:1px solid var(--line); border-radius:6px; font-size:14px; margin-top:3px; background:#fff; }
+  button { padding:9px 14px; border-radius:6px; border:1px solid var(--blue); background:var(--blue); color:#fff; font-weight:600; cursor:pointer; font-size:14px; }
+  button.ghost { background:#fff; color:var(--blue); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  .pill { display:inline-block; padding:4px 10px; border-radius:20px; font-weight:700; font-size:13px; }
+  .b0 { background:#dcfce7; color:var(--ok); } .b1 { background:#e0e7ff; color:var(--blue); }
+  .b2 { background:#fef3c7; color:var(--warn); } .b3 { background:#fee2e2; color:var(--bad); }
+  .muted { color:var(--muted); font-size:13px; line-height:1.5; }
+  .factors div { display:flex; justify-content:space-between; font-size:13px; padding:3px 0; border-bottom:1px dashed var(--line); }
+  .camwrap { position:relative; background:#111827; border-radius:10px; overflow:hidden; max-width:480px; aspect-ratio:4/3; }
+  video, canvas.preview { width:100%; height:100%; object-fit:cover; display:block; }
+  .prompt { position:absolute; left:10px; right:10px; top:10px; background:rgba(37,99,235,.92); color:#fff; padding:8px 10px; border-radius:8px; font-size:13px; }
+  .code { position:absolute; right:10px; bottom:10px; background:#fff; color:#111; font:700 20px monospace; padding:6px 10px; border-radius:6px; letter-spacing:2px; }
+  pre { background:#0f172a; color:#e2e8f0; padding:12px; border-radius:8px; font-size:12px; overflow:auto; max-height:320px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:6px; border-bottom:1px solid var(--line); }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Proof-of-Claim: working prototype</h1>
+  <p>File a "damaged / wrong item" claim. The app scores the claim with a model running in your browser, picks how much proof it needs, captures that proof (live camera for risky claims, with a random prompt), fingerprints the photo, checks it against earlier claims for near-duplicates, and produces a claim record. Everything stays on this device. The model is trained on synthetic data, so it is for demonstration only.</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2>1. Claim details</h2>
+    <div class="row" style="margin-top:0">
+      <span class="muted">Load an example:</span>
+      <button class="ghost" data-preset="honest">Long-time shopper</button>
+      <button class="ghost" data-preset="medium">Mid-history shopper</button>
+      <button class="ghost" data-preset="risky">Frequent claimant</button>
+    </div>
+    <div class="grid" style="margin-top:12px">
+      <div><label>Category<select id="category"><option>Electronics</option><option>Fashion</option><option>Home</option><option>Grocery/FMCG</option><option>Beauty</option></select></label></div>
+      <div><label>Item value (Rs)<input id="value" type="number" min="1" value="2499"></label></div>
+      <div><label>Account age (months)<input id="account_age_m" type="number" min="0" value="36"></label></div>
+      <div><label>Past orders<input id="past_orders" type="number" min="0" value="40"></label></div>
+      <div><label>Past damage / wrong-item claims<input id="past_claims" type="number" min="0" value="1"></label></div>
+      <div><label>Hours since delivery<input id="hours_to_claim" type="number" min="0" value="20"></label></div>
+      <div><label>SKU defect rate (%)<input id="sku_defect" type="number" min="0" step="0.1" value="6"></label></div>
+      <div><label>Open-box delivery<select id="open_box"><option value="0">No</option><option value="1">Yes</option></select></label></div>
+    </div>
+    <div class="row"><button id="scoreBtn">Score claim</button></div>
+  </section>
+
+  <section class="card hidden" id="scoreCard">
+    <h2>2. Risk band</h2>
+    <div class="row" style="margin-top:0"><span id="bandPill" class="pill"></span><span class="muted" id="scoreText"></span></div>
+    <p class="muted" id="bandRule"></p>
+    <div class="factors" id="factors"></div>
+  </section>
+
+  <section class="card hidden" id="proofCard">
+    <h2>3. Proof</h2>
+    <p class="muted" id="proofText"></p>
+    <div class="camwrap" id="camwrap">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="preview" class="preview hidden"></canvas>
+      <div class="prompt" id="promptBox"></div>
+      <div class="code hidden" id="codeBox"></div>
+    </div>
+    <div class="row">
+      <button id="camBtn">Start camera</button>
+      <button id="snapBtn" disabled>Capture</button>
+      <span id="uploadWrap" class="hidden"><label class="muted" style="display:inline">or upload a photo <input type="file" id="file" accept="image/*" style="width:auto;display:inline"></label></span>
+    </div>
+    <p class="muted" id="camMsg"></p>
+  </section>
+
+  <section class="card hidden" id="resultCard">
+    <h2>4. Decision and claim record</h2>
+    <p id="decision" style="font-weight:600"></p>
+    <pre id="record"></pre>
+    <div class="row"><button class="ghost" id="dlBtn">Download record (JSON)</button><button class="ghost" id="newBtn">New claim</button></div>
+  </section>
+
+  <section class="card">
+    <h2>Claims on this device</h2>
+    <table><thead><tr><th>Time</th><th>Category</th><th>Value</th><th>Band</th><th>Duplicate?</th><th>Outcome</th></tr></thead><tbody id="log"></tbody></table>
+    <div class="row"><button class="ghost" id="clearBtn">Clear history</button></div>
+  </section>
+</main>
+
+<script src="model.js"></script>
+<script>
+const M = window.CLAIM_MODEL;
+const BAND_NAMES = ["Low", "Medium", "High", "Very high"];
+const BAND_RULES = [
+  "Any photo is accepted (camera or gallery). Refund is issued instantly; pickup is scheduled afterwards.",
+  "Live in-app capture only, with a random prompt. Refund is released when the pickup agent scans the item.",
+  "Live capture with the claim code in frame, plus a doorstep inspection before the refund.",
+  "Live capture with the claim code in frame, doorstep inspection and specialist review within 48 hours. One-tap appeal."
+];
+const PROMPTS = [
+  "Show the damage, then tilt the box so the shipping label is visible",
+  "Place the item on the open box and show the damaged area up close",
+  "Show the item next to its packaging with the product sticker visible",
+  "Turn the item over and show the damage from a second angle",
+  "Hold the item so the damaged part and the brand logo are both in view"
+];
+const PRESETS = {
+  honest: {category:"Electronics", value:2499, account_age_m:36, past_orders:40, past_claims:1, hours_to_claim:20, sku_defect:6, open_box:0},
+  medium: {category:"Fashion", value:1499, account_age_m:14, past_orders:15, past_claims:1, hours_to_claim:28, sku_defect:4.5, open_box:0},
+  risky:  {category:"Electronics", value:8999, account_age_m:5, past_orders:9, past_claims:3, hours_to_claim:70, sku_defect:1.5, open_box:0}
+};
+const LABELS = {
+  "log_value":"Item value", "account_age_m":"Account age", "past_orders":"Past orders", "hours_to_claim":"Time since delivery",
+  "sku_defect_rate":"Product's known defect rate", "open_box_delivery":"Open-box delivery", "exif_missing":"Photo metadata missing",
+  "detector_flag":"AI-image detector flag", "near_duplicate_img":"Near-duplicate of an earlier photo", "past_claim_rate":"Past claim rate"
+};
+
+let claim = null, stream = null;
+
+const $ = id => document.getElementById(id);
+const store = {
+  get() { try { return JSON.parse(localStorage.getItem("poc_claims") || "[]"); } catch (e) { return []; } },
+  set(v) { try { localStorage.setItem("poc_claims", JSON.stringify(v)); } catch (e) {} }
+};
+
+function readForm() {
+  const n = id => Math.max(0, parseFloat($(id).value) || 0);
+  return { category:$("category").value, value:Math.max(1, n("value")), account_age_m:n("account_age_m"), past_orders:n("past_orders"),
+           past_claims:n("past_claims"), hours_to_claim:n("hours_to_claim"), sku_defect_rate:n("sku_defect")/100, open_box_delivery:+$("open_box").value };
+}
+
+function featureVector(c, photo) {
+  const f = {
+    "category_Electronics": c.category === "Electronics" ? 1 : 0, "category_Fashion": c.category === "Fashion" ? 1 : 0,
+    "category_Grocery/FMCG": c.category === "Grocery/FMCG" ? 1 : 0, "category_Home": c.category === "Home" ? 1 : 0,
+    "log_value": Math.log(c.value), "account_age_m": c.account_age_m, "past_orders": c.past_orders, "hours_to_claim": c.hours_to_claim,
+    "sku_defect_rate": c.sku_defect_rate, "open_box_delivery": c.open_box_delivery,
+    "exif_missing": photo ? photo.exif_missing : 0, "detector_flag": 0, "near_duplicate_img": photo ? photo.near_duplicate : 0,
+    "past_claim_rate": c.past_claims / Math.max(c.past_orders, 1)
+  };
+  return M.features.map(k => f[k]);
+}
+
+function score(c, photo) {
+  const x = featureVector(c, photo);
+  let z = M.intercept; const contrib = [];
+  x.forEach((v, i) => { const t = M.coef[i] * (v - M.mean[i]) / M.std[i]; z += t; contrib.push([M.features[i], t]); });
+  const p = 1 / (1 + Math.exp(-z));
+  let band = 0; M.band_cuts.forEach(cut => { if (p >= cut) band++; });
+  return { p, band, contrib };
+}
+
+function showScore(s) {
+  $("scoreCard").classList.remove("hidden");
+  $("bandPill").className = "pill b" + s.band;
+  $("bandPill").textContent = BAND_NAMES[s.band] + " risk";
+  $("scoreText").textContent = "Model score " + s.p.toFixed(3) + " (synthetic-data model, AUC " + M.holdout_auc + ")";
+  $("bandRule").textContent = BAND_RULES[s.band];
+  const top = s.contrib.filter(([k]) => LABELS[k]).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 4);
+  $("factors").innerHTML = "<div class='muted'><b>Main factors</b><span></span></div>" + top.map(([k, t]) =>
+    `<div><span>${LABELS[k]}</span><span style="color:${t > 0 ? 'var(--bad)' : 'var(--ok)'}">${t > 0 ? "raises" : "lowers"} risk</span></div>`).join("");
+}
+
+function setupProof(band) {
+  $("proofCard").classList.remove("hidden");
+  claim.prompt = band === 0 ? null : PROMPTS[Math.floor(Math.random() * PROMPTS.length)];
+  claim.code = band >= 2 ? Math.random().toString(36).slice(2, 8).toUpperCase() : null;
+  $("promptBox").textContent = claim.prompt || "Take a clear photo of the issue";
+  $("codeBox").textContent = claim.code || "";
+  $("codeBox").classList.toggle("hidden", !claim.code);
+  $("uploadWrap").classList.toggle("hidden", band !== 0);
+  $("proofText").textContent = band === 0
+    ? "Low risk: take a photo or upload one from your gallery."
+    : "Gallery upload is turned off for this claim. Use the live camera and follow the prompt." + (claim.code ? " Write the claim code on paper or show this screen on a second device so it is in the frame." : "");
+  $("preview").classList.add("hidden"); $("video").classList.remove("hidden");
+  $("camMsg").textContent = "";
+}
+
+$("scoreBtn").onclick = () => {
+  const c = readForm();
+  claim = { id: "CLM-" + Date.now().toString(36).toUpperCase(), created_at: new Date().toISOString(), details: c };
+  const s = score(c, null);
+  claim.initial = { score: +s.p.toFixed(4), band: BAND_NAMES[s.band] };
+  claim.bandIndex = s.band;
+  showScore(s);
+  setupProof(s.band);
+  $("resultCard").classList.add("hidden");
+};
+
+document.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => {
+  const p = PRESETS[b.dataset.preset];
+  $("category").value = p.category; $("value").value = p.value; $("account_age_m").value = p.account_age_m; $("past_orders").value = p.past_orders;
+  $("past_claims").value = p.past_claims; $("hours_to_claim").value = p.hours_to_claim; $("sku_defect").value = p.sku_defect; $("open_box").value = p.open_box;
+});
+
+$("camBtn").onclick = async () => {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+    $("video").srcObject = stream; $("snapBtn").disabled = false;
+    $("camMsg").textContent = "Camera on. Follow the prompt, then press Capture.";
+  } catch (e) {
+    $("camMsg").textContent = "Camera unavailable (" + e.name + "). Open this page over https (for example GitHub Pages) and allow camera access.";
+  }
+};
+
+function stopCam() { if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; } $("snapBtn").disabled = true; }
+
+$("snapBtn").onclick = () => {
+  const v = $("video"), cv = $("preview");
+  cv.width = v.videoWidth || 640; cv.height = v.videoHeight || 480;
+  cv.getContext("2d").drawImage(v, 0, 0, cv.width, cv.height);
+  stopCam();
+  v.classList.add("hidden"); cv.classList.remove("hidden");
+  processImage(cv, "live_capture", 0);
+};
+
+$("file").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  const buf = new Uint8Array(await f.arrayBuffer());
+  const exifMissing = hasExif(buf) ? 0 : 1;
+  const img = new Image(); img.src = URL.createObjectURL(f);
+  await img.decode();
+  const cv = $("preview"); cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+  cv.getContext("2d").drawImage(img, 0, 0);
+  stopCam(); $("video").classList.add("hidden"); cv.classList.remove("hidden");
+  processImage(cv, "gallery_upload", exifMissing);
+};
+
+function hasExif(b) {
+  // JPEG APP1 "Exif" marker search in the first 64 KB
+  const n = Math.min(b.length - 4, 65536);
+  for (let i = 0; i < n; i++) if (b[i] === 0x45 && b[i+1] === 0x78 && b[i+2] === 0x69 && b[i+3] === 0x66) return true;
+  return false;
+}
+
+function dHash(cv) {
+  // 9x8 grayscale difference hash -> 64-bit hex string
+  const t = document.createElement("canvas"); t.width = 9; t.height = 8;
+  const ctx = t.getContext("2d"); ctx.drawImage(cv, 0, 0, 9, 8);
+  const d = ctx.getImageData(0, 0, 9, 8).data; let bits = "";
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+    const i = (y * 9 + x) * 4, j = i + 4;
+    const a = d[i] * .299 + d[i+1] * .587 + d[i+2] * .114, b = d[j] * .299 + d[j+1] * .587 + d[j+2] * .114;
+    bits += a > b ? "1" : "0";
+  }
+  let hex = ""; for (let k = 0; k < 64; k += 4) hex += parseInt(bits.slice(k, k + 4), 2).toString(16);
+  return hex;
+}
+
+function hamming(h1, h2) {
+  let d = 0;
+  for (let i = 0; i < h1.length; i++) { let x = parseInt(h1[i], 16) ^ parseInt(h2[i], 16); while (x) { d += x & 1; x >>= 1; } }
+  return d;
+}
+
+async function sha256(cv) {
+  const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.9));
+  const buf = await blob.arrayBuffer();
+  const h = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(h)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function processImage(cv, source, exifMissing) {
+  const hash = dHash(cv);
+  const past = store.get();
+  let best = null;
+  past.forEach(p => { if (p.dhash) { const d = hamming(hash, p.dhash); if (!best || d < best.d) best = { d, id: p.id }; } });
+  const dup = best && best.d <= 6 ? 1 : 0;
+  const photo = { exif_missing: source === "gallery_upload" ? exifMissing : 0, near_duplicate: dup };
+  const s = score(claim.details, photo);
+  const finalBand = Math.max(s.band, claim.bandIndex);   // photo checks can only raise the band
+  let digest = "unavailable";
+  try { digest = await sha256(cv); } catch (e) {}
+
+  const outcomes = [
+    "Approved: refund issued instantly. Pickup scheduled.",
+    "Approved pending pickup: refund released when the agent scans the item.",
+    "Doorstep inspection booked: refund released if the item matches the photo.",
+    "Sent to specialist review (48 hours) with doorstep inspection. Appeal available."
+  ];
+  claim.proof = {
+    source, captured_at: new Date().toISOString(), prompt: claim.prompt, claim_code: claim.code,
+    sha256: digest, dhash: hash, exif_missing: photo.exif_missing,
+    nearest_previous_claim: best ? { id: best.id, hamming_distance: best.d } : null, near_duplicate: !!dup
+  };
+  claim.final = { score: +s.p.toFixed(4), band: BAND_NAMES[finalBand], outcome: outcomes[finalBand] };
+  if (finalBand > claim.bandIndex) claim.final.escalated_because = dup ? "photo is a near-duplicate of an earlier claim" : "photo signals raised the risk score";
+  const record = { id: claim.id, created_at: claim.created_at, details: claim.details, initial_assessment: claim.initial, proof: claim.proof, decision: claim.final, model_note: M.note };
+
+  $("resultCard").classList.remove("hidden");
+  $("decision").textContent = claim.final.outcome + (claim.final.escalated_because ? " (escalated: " + claim.final.escalated_because + ")" : "");
+  $("record").textContent = JSON.stringify(record, null, 2);
+  claim.record = record;
+  past.unshift({ id: claim.id, t: claim.created_at, category: claim.details.category, value: claim.details.value, band: claim.final.band, dup: !!dup, outcome: claim.final.outcome.split(":")[0], dhash: hash });
+  store.set(past.slice(0, 200));
+  renderLog();
+}
+
+function renderLog() {
+  const rows = store.get();
+  $("log").innerHTML = rows.length ? rows.map(r => `<tr><td>${new Date(r.t).toLocaleString()}</td><td>${r.category}</td><td>Rs ${r.value}</td><td>${r.band}</td><td>${r.dup ? "Yes" : "No"}</td><td>${r.outcome}</td></tr>`).join("")
+    : `<tr><td colspan="6" class="muted">No claims yet. Capture the same object twice to see the near-duplicate check fire.</td></tr>`;
+}
+
+$("dlBtn").onclick = () => {
+  if (!claim || !claim.record) return;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(claim.record, null, 2)], { type: "application/json" }));
+  a.download = claim.id + ".json"; a.click();
+};
+$("newBtn").onclick = () => { ["scoreCard", "proofCard", "resultCard"].forEach(id => $(id).classList.add("hidden")); stopCam(); window.scrollTo(0, 0); };
+$("clearBtn").onclick = () => { store.set([]); renderLog(); };
+renderLog();
+</script>
+</body>
+</html>

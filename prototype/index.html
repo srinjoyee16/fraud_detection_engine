@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proof-of-Claim - Return Flow Prototype</title>
+<style>
+  :root { --blue:#2563eb; --ink:#111827; --muted:#6b7280; --line:#e5e7eb; --bg:#f3f4f6; --ok:#16a34a; --warn:#d97706; --bad:#dc2626; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--ink); }
+  header { max-width:1150px; margin:0 auto; padding:24px 16px 8px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  header p { margin:0; color:var(--muted); font-size:14px; line-height:1.5; }
+  .wrap { max-width:1150px; margin:0 auto; padding:16px; display:grid; grid-template-columns:300px 1fr; gap:24px; }
+  @media (max-width:860px) { .wrap { grid-template-columns:1fr; } }
+  .panel { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; align-self:start; }
+  .panel h2 { font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 12px; }
+  .band { display:block; width:100%; text-align:left; padding:10px 12px; margin-bottom:8px; border:1px solid var(--line); border-radius:8px; background:#fff; cursor:pointer; font-size:14px; }
+  .band small { display:block; color:var(--muted); margin-top:2px; }
+  .band.active { border-color:var(--blue); background:#eff6ff; }
+  .signals { font-size:13px; color:var(--muted); line-height:1.6; margin-top:12px; }
+  .signals b { color:var(--ink); }
+  .stage { display:flex; gap:20px; flex-wrap:wrap; justify-content:center; }
+  .phone { width:300px; background:#fff; border-radius:28px; border:10px solid #111827; min-height:560px; overflow:hidden; display:flex; flex-direction:column; }
+  .bar { background:var(--blue); color:#fff; padding:14px 16px; font-weight:600; font-size:15px; }
+  .body { padding:14px 16px; flex:1; font-size:14px; line-height:1.45; }
+  .caption { text-align:center; font-size:12px; color:var(--muted); margin-top:8px; max-width:300px; }
+  .item { display:flex; gap:10px; padding-bottom:12px; border-bottom:1px solid var(--line); margin-bottom:12px; }
+  .thumb { width:52px; height:52px; border-radius:8px; background:linear-gradient(135deg,#c7d2fe,#fde68a); flex-shrink:0; }
+  .opt { border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+  .opt.sel { border-color:var(--blue); box-shadow:0 0 0 1px var(--blue) inset; }
+  .note { font-size:12px; color:var(--muted); margin-top:4px; }
+  .cam { background:#111827; color:#fff; border-radius:12px; height:230px; position:relative; display:flex; align-items:center; justify-content:center; text-align:center; padding:16px; font-size:13px; }
+  .cam .frame { position:absolute; inset:18px; border:2px dashed rgba(255,255,255,.5); border-radius:10px; }
+  .cam .prompt { position:relative; background:rgba(37,99,235,.9); padding:8px 10px; border-radius:8px; }
+  .chip { display:inline-block; font-size:11px; font-weight:600; padding:3px 8px; border-radius:20px; margin:8px 4px 0 0; background:#f3f4f6; color:var(--muted); }
+  .status { border-radius:10px; padding:12px; margin-bottom:10px; }
+  .status.ok { background:#dcfce7; }
+  .status.wait { background:#fef3c7; }
+  .status.rev { background:#fee2e2; }
+  .step { display:flex; gap:8px; margin:8px 0; font-size:13px; }
+  .dot { width:10px; height:10px; border-radius:50%; background:var(--line); margin-top:4px; flex-shrink:0; }
+  .dot.done { background:var(--ok); }
+  .cta { margin:12px 16px 16px; padding:12px; text-align:center; background:#fb641b; color:#fff; font-weight:700; border-radius:6px; }
+  footer { max-width:1150px; margin:0 auto; padding:8px 16px 32px; color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Proof-of-Claim - return and refund flow prototype</h1>
+  <p>When a shopper reports a damaged or wrong item, a claim risk score decides how much proof the flow asks for. Most honest shoppers get an instant refund; only riskier claims get live in-app capture, doorstep inspection or review. Concept prototype for a personal product case study, not affiliated with any company.</p>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <h2>Claim risk band</h2>
+    <button class="band active" data-b="0">Low (about 55% of claims)<small>Gallery photo OK, instant refund</small></button>
+    <button class="band" data-b="1">Medium (about 30%)<small>Live in-app capture, refund on pickup scan</small></button>
+    <button class="band" data-b="2">High (about 12%)<small>Live capture + doorstep inspection</small></button>
+    <button class="band" data-b="3">Very high (about 3%)<small>Live capture + inspection + specialist review</small></button>
+    <div class="signals" id="signals"></div>
+  </div>
+  <div class="stage">
+    <div><div class="phone"><div class="bar">Return / replace</div><div class="body" id="s1"></div><div class="cta">Continue</div></div><div class="caption">1. Report the issue</div></div>
+    <div><div class="phone"><div class="bar">Add proof</div><div class="body" id="s2"></div><div class="cta" id="cta2">Submit</div></div><div class="caption">2. Proof step - changes by band</div></div>
+    <div><div class="phone"><div class="bar">Refund status</div><div class="body" id="s3"></div></div><div class="caption">3. What happens next</div></div>
+  </div>
+</div>
+
+<footer>Band shares come from the synthetic simulation in /analysis. Live capture would attach signed capture metadata (C2PA-style Content Credentials) and block gallery uploads for that claim.</footer>
+
+<script>
+const issue = `<div class="item"><div class="thumb"></div><div><b>Bluetooth speaker</b><div class="note">Delivered yesterday - Rs 2,499</div></div></div>
+<b>What went wrong?</b>
+<div class="opt sel">Item arrived damaged</div><div class="opt">Wrong item delivered</div><div class="opt">Missing parts / accessories</div><div class="opt">Not working</div>`;
+
+const S = {
+  0: { sig:"<b>Typical signals:</b> long account history, low past claim rate, SKU with a known defect rate, photo has normal camera metadata.",
+       s2:`<div class="opt sel"><b>Upload a photo</b><div class="note">From camera or gallery</div></div><div class="cam"><div class="frame"></div><div>photo_0412.jpg attached</div></div><span class="chip">Metadata OK</span><span class="chip">No duplicate found</span>`,
+       cta:"Submit and get refund",
+       s3:`<div class="status ok"><b>Refund of Rs 2,499 issued</b><div class="note">To your original payment method. Arrives in minutes on UPI.</div></div><div class="step"><div class="dot done"></div>Claim approved instantly</div><div class="step"><div class="dot"></div>Pickup scheduled for Thu (keep the item packed)</div>` },
+  1: { sig:"<b>Typical signals:</b> newer account, claim filed quickly on a high-value item, photo missing camera metadata.",
+       s2:`<div class="cam"><div class="frame"></div><div class="prompt">Show the damage, then tilt the box so we can see the shipping label</div></div><span class="chip">Live capture only</span><span class="chip">Random prompt</span><span class="chip">Signed at capture</span><div class="note" style="margin-top:10px">Takes about 20 seconds. Gallery uploads are turned off for this claim to keep refunds fast and fair for everyone.</div>`,
+       cta:"Capture and submit",
+       s3:`<div class="status wait"><b>Refund on pickup</b><div class="note">Rs 2,499 is released the moment our agent scans the item at your door.</div></div><div class="step"><div class="dot done"></div>Live photo verified</div><div class="step"><div class="dot"></div>Pickup tomorrow, 10 AM - 1 PM</div><div class="step"><div class="dot"></div>Refund on scan</div>` },
+  2: { sig:"<b>Typical signals:</b> several claims in the last 90 days, AI-image detector flag on the first photo, low defect rate for this SKU.",
+       s2:`<div class="cam"><div class="frame"></div><div class="prompt">Hold the item next to the order QR code shown on your screen</div></div><span class="chip">Live capture only</span><span class="chip">Order QR in frame</span><div class="note" style="margin-top:10px">Our pickup agent will also check the item at your door before the refund.</div>`,
+       cta:"Capture and submit",
+       s3:`<div class="status wait"><b>Doorstep check before refund</b><div class="note">The agent checks the item against your photo at pickup. If it matches, the refund is released right there.</div></div><div class="step"><div class="dot done"></div>Live photo received</div><div class="step"><div class="dot"></div>Pickup with doorstep check, Fri</div><div class="step"><div class="dot"></div>Refund after check</div>` },
+  3: { sig:"<b>Typical signals:</b> near-duplicate of an image used on another account, many recent claims across linked accounts.",
+       s2:`<div class="cam"><div class="frame"></div><div class="prompt">Record a 10-second video: show the item, the damage and the order QR</div></div><span class="chip">Live video</span><span class="chip">Order QR in frame</span>`,
+       cta:"Record and submit",
+       s3:`<div class="status rev"><b>Under review</b><div class="note">A specialist reviews this claim within 48 hours. The item is inspected at pickup. You can appeal any decision in one tap.</div></div><div class="step"><div class="dot done"></div>Video received</div><div class="step"><div class="dot"></div>Pickup with inspection</div><div class="step"><div class="dot"></div>Decision within 48 hours</div>` }
+};
+function render(b){ const s=S[b];
+  document.getElementById("signals").innerHTML=s.sig;
+  document.getElementById("s1").innerHTML=issue;
+  document.getElementById("s2").innerHTML=s.s2;
+  document.getElementById("cta2").textContent=s.cta;
+  document.getElementById("s3").innerHTML=s.s3;
+  document.querySelectorAll(".band").forEach(e=>e.classList.toggle("active", e.dataset.b==b)); }
+document.querySelectorAll(".band").forEach(e=>e.addEventListener("click",()=>render(e.dataset.b)));
+render(0);
+</script>
+</body>
+</html>

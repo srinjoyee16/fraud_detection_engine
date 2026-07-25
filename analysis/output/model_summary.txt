@@ -1,0 +1,6 @@
+Synthetic claims: 150000
+Fraud rate: 0.0802
+Holdout AUC (gradient boosting): 0.845
+AUC of AI detector flag alone: 0.619
+Top 15% capture: 0.602
+Top 45% capture: 0.874
